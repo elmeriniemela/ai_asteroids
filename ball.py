@@ -14,30 +14,35 @@ class Game:
 
 
 class Ball(pygame.sprite.Sprite):
+    _wrap_walls = False
+    _draw_boxes = False
+
     def __init__(self, pos, speed, radius, mass, color=red):
         super().__init__()
         self.image = pygame.Surface([radius * 2, radius * 2])
         self.image.fill(white)
         self.image.set_colorkey(white)
-        pygame.draw.circle(self.image, color, (radius, radius), radius, width=1)
-        N = 3
-        step = (radius*2)/N
-        for y in range(N):
-            for x in range(N):
-                lines = [
-                    (x*step, y*step),
-                    ((x+1)*step, y*step),
-                    ((x+1)*step, (y+1)*step),
-                    (x*step, (y+1)*step),
-                ]
+        pygame.draw.circle(self.image, color, (radius, radius), radius)
 
-                pygame.draw.lines(
-                    surface=self.image,
-                    color=black,
-                    closed=True,
-                    points=lines,
-                    width=3,
-                )
+        if self._draw_boxes:
+            N = 3
+            step = (radius*2)/N
+            for y in range(N):
+                for x in range(N):
+                    lines = [
+                        (x*step, y*step),
+                        ((x+1)*step, y*step),
+                        ((x+1)*step, (y+1)*step),
+                        (x*step, (y+1)*step),
+                    ]
+
+                    pygame.draw.lines(
+                        surface=self.image,
+                        color=black,
+                        closed=True,
+                        points=lines,
+                        width=3,
+                    )
 
         self.rect = self.image.get_rect()
         self.radius = radius
@@ -59,21 +64,38 @@ class Ball(pygame.sprite.Sprite):
         self.rect.x, self.rect.y = value
 
     def move(self):
-        self.rect.x, self.rect.y = self.position + self.speed
+        self.position += self.speed
 
     def wall_collision(self):
         max_width, max_height = game.window_size
         width, height = self.image.get_width(), self.image.get_height()
 
-        if self.rect.x > max_width - (width / 2):
-            self.rect.x = -(width / 2)
-        elif self.rect.x < -(width / 2):
-            self.rect.x = max_width - (width / 2)
+        if self._wrap_walls:
+            if self.rect.x > max_width - (width / 2):
+                self.rect.x = -(width / 2)
+            elif self.rect.x < -(width / 2):
+                self.rect.x = max_width - (width / 2)
 
-        if self.rect.y > max_height - (height / 2):
-            self.rect.y = -(height / 2)
-        elif self.rect.y < -(height / 2):
-            self.rect.y = max_height - (height / 2)
+            if self.rect.y > max_height - (height / 2):
+                self.rect.y = -(height / 2)
+            elif self.rect.y < -(height / 2):
+                self.rect.y = max_height - (height / 2)
+        else:
+            if self.rect.x > max_width - width:
+                self.rect.x = max_width - width
+                self.speed[0] = -self.speed[0]
+
+            if self.rect.x < 0:
+                self.rect.x = 0
+                self.speed[0] = -self.speed[0]
+
+            if self.rect.y > max_height - height:
+                self.rect.y = max_height - height
+                self.speed[1] = -self.speed[1]
+
+            if self.rect.y < 0:
+                self.rect.y = 0
+                self.speed[1] = -self.speed[1]
 
     def update(self):
         self.wall_collision()
@@ -103,17 +125,15 @@ class Ball(pygame.sprite.Sprite):
         other.speed = normal_speed2 + tangent_speed2
 
 
-
-
 if __name__ == "__main__":
 
     game = Game(640, 480)
     running = True
-    ball01 = Ball(pos=[0, 0], speed=[1, 1], radius=30, mass=5, color=blue)
-    ball02 = Ball(pos=[0, 430], speed=[0, 0], radius=30, mass=5, color=red)
-    ball03 = Ball(pos=[430, 0], speed=[2, 2], radius=30, mass=5, color=black)
-    ball04 = Ball(pos=[330, 0], speed=[2, 2], radius=30, mass=5, color=green)
-    ball05 = Ball(pos=[230, 0], speed=[2, 2], radius=30, mass=5, color=gray)
+    ball01 = Ball(pos=[0, 0], speed=[1, 1], radius=50, mass=500, color=blue)
+    ball02 = Ball(pos=[0, 380], speed=[0, 0], radius=50, mass=10, color=red)
+    ball03 = Ball(pos=[430, 0], speed=[2, 2], radius=25, mass=5, color=black)
+    ball04 = Ball(pos=[330, 0], speed=[2, 2], radius=25, mass=5, color=green)
+    ball05 = Ball(pos=[230, 0], speed=[2, 2], radius=25, mass=5, color=gray)
 
     spritelist = [ball01, ball02, ball03, ball04, ball05]
 

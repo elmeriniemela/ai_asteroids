@@ -1,49 +1,3 @@
-from math import sqrt
-
-
-def plus(list1, list2):
-    a = [list1[0] + list2[0], list1[1] + list2[1]]
-    return a
-
-
-def dotp(list1, list2):
-    a = list1[0] * list2[0] + list1[1] * list2[1]
-    return a
-
-
-def times(scalar, list1):
-    a = [x * scalar for x in list1]
-    return a
-
-
-def reverse(list1):
-    a = [-list1[0], -list1[1]]
-    return a
-
-
-def mag(list1):
-    a = sqrt(dotp(list1, list1))
-    return a
-
-
-def proj(list1, list2):
-    scalar = dotp(list1, list2) / dotp(list2, list2)
-    a = times(scalar, list2)
-    return a
-
-
-def comp(list1, list2):
-    a = dotp(list1, list2) / mag(list2)
-    return a
-
-def unit(list):
-    scalar = mag(list)
-    if not scalar:
-        return list
-    a = times(1/scalar, list)
-    return a
-
-
 import math
 
 class Vector:
@@ -54,7 +8,7 @@ class Vector:
     def __init__(self, *args):
         """ Create a vector, example: v = Vector(1,2) """
         if len(args)==0: self.values = (0,0)
-        else: self.values = args
+        else: self.values = list(args)
         assert all(isinstance(x, (int, float, complex)) and not isinstance(x, bool) for x in self.values),\
             "Only numeric vectors allowed: %s" % self.values
 
@@ -145,6 +99,8 @@ class Vector:
             by another Vector.  If multiplied by an int or float,
             multiplies each component by other.
         """
+        if isinstance(other, list):
+            other = self.__class__(*other)
         if isinstance(other, Vector):
             return self.inner(other)
         elif isinstance(other, (int, float)):
@@ -158,6 +114,8 @@ class Vector:
         return self.__mul__(other)
 
     def __truediv__(self, other):
+        if isinstance(other, list):
+            other = self.__class__(*other)
         if isinstance(other, Vector):
             divided = tuple(self[i] / other[i] for i in range(len(self)))
         elif isinstance(other, (int, float)):
@@ -169,6 +127,8 @@ class Vector:
 
     def __add__(self, other):
         """ Returns the vector addition of self and other """
+        if isinstance(other, list):
+            other = self.__class__(*other)
         if isinstance(other, Vector):
             added = tuple( a + b for a, b in zip(self, other) )
         elif isinstance(other, (int, float)):
@@ -184,6 +144,8 @@ class Vector:
 
     def __sub__(self, other):
         """ Returns the vector difference of self and other """
+        if isinstance(other, list):
+            other = self.__class__(*other)
         if isinstance(other, Vector):
             subbed = tuple( a - b for a, b in zip(self, other) )
         elif isinstance(other, (int, float)):
@@ -205,6 +167,9 @@ class Vector:
 
     def __getitem__(self, key):
         return self.values[key]
+
+    def __setitem__(self, key, value):
+        self.values[key] = value
 
     def __repr__(self):
         return str(self.values)
