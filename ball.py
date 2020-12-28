@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 from itertools import combinations
+import random
+
+import pygame
 
 import vector
-from colors import *
+import colors as C
 
 
 class Game:
@@ -11,50 +14,48 @@ class Game:
         self.window = pygame.display.set_mode(self.window_size)
         pygame.display.set_caption("Asteroids")
         self.surface = pygame.Surface([width, height])
-        self.surface.fill(white)
+        self.surface.fill(C.white)
 
+    def run(self):
+        running = True
+        spritelist = [Asteroid.random(*self.window_size) for _ in range(10)]
+        group = pygame.sprite.Group(spritelist)
 
-class Ball(pygame.sprite.Sprite):
-    _wrap_walls = False
-    _draw_boxes = False
+        clock = pygame.time.Clock()
+        fps = 60
 
-    def __init__(self, pos, speed, radius, mass, color=red):
+        while running is True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+
+            dt = clock.tick(fps)
+
+            for a, b in combinations(group, r=2):
+                if pygame.sprite.collide_circle(a, b):
+                    a.collide(b)
+
+            for ball in spritelist:
+                ball.update(dt)
+
+            game.window.blit(game.surface, [0, 0])
+            group.draw(game.window)
+
+            pygame.display.update()
+
+        pygame.quit()
+
+class Object(pygame.sprite.Sprite):
+
+    def __init__(self, pos, speed, width, height):
         super().__init__()
-        self.image = pygame.Surface([radius * 2, radius * 2])
-        self.image.fill(white)
-        self.image.set_colorkey(white)
-        pygame.draw.circle(self.image, color, (radius, radius), radius)
-
-        if self._draw_boxes:
-            N = 3
-            step = (radius*2)/N
-            for y in range(N):
-                for x in range(N):
-                    lines = [
-                        (x*step, y*step),
-                        ((x+1)*step, y*step),
-                        ((x+1)*step, (y+1)*step),
-                        (x*step, (y+1)*step),
-                    ]
-
-                    pygame.draw.lines(
-                        surface=self.image,
-                        color=black,
-                        closed=True,
-                        points=lines,
-                        width=3,
-                    )
-
+        self.image = pygame.Surface([width, height])
+        self.image.fill(C.white)
+        self.image.set_colorkey(C.white)
         self.rect = self.image.get_rect()
-        self.radius = radius
-        self.speed = vector.Vector(*speed)
         self.position = pos
-        self.mass = mass
+        self.speed = vector.Vector(*speed)
 
-
-    @property
-    def origin(self):
-        return vector.Vector(self.x + self.radius, self.y + self.radius)
 
     @property
     def position(self):
@@ -82,43 +83,75 @@ class Ball(pygame.sprite.Sprite):
     def y(self, value):
         self.position = self.x, value
 
-    def move(self):
-        self.position += self.speed
+    def move(self, dt):
+        self.position += self.speed * dt
 
     def wall_collision(self):
         max_width, max_height = game.window_size
         width, height = self.image.get_width(), self.image.get_height()
+        if self.x > max_width - (width / 2):
+            self.x = -(width / 2)
+        elif self.x < -(width / 2):
+            self.x = max_width - (width / 2)
 
-        if self._wrap_walls:
-            if self.x > max_width - (width / 2):
-                self.x = -(width / 2)
-            elif self.x < -(width / 2):
-                self.x = max_width - (width / 2)
+        if self.y > max_height - (height / 2):
+            self.y = -(height / 2)
+        elif self.y < -(height / 2):
+            self.y = max_height - (height / 2)
 
-            if self.y > max_height - (height / 2):
-                self.y = -(height / 2)
-            elif self.y < -(height / 2):
-                self.y = max_height - (height / 2)
-        else:
-            if self.x > max_width - width:
-                self.x = max_width - width
-                self.speed[0] = -self.speed[0]
-
-            if self.x < 0:
-                self.x = 0
-                self.speed[0] = -self.speed[0]
-
-            if self.y > max_height - height:
-                self.y = max_height - height
-                self.speed[1] = -self.speed[1]
-
-            if self.y < 0:
-                self.y = 0
-                self.speed[1] = -self.speed[1]
-
-    def update(self):
+    def update(self, dt):
         self.wall_collision()
-        self.move()
+        self.move(dt)
+
+
+class Player(Object):
+    pass
+
+
+
+class Asteroid(Object):
+    _draw_boxes = False
+
+    def __init__(self, pos, speed, radius, mass, color=C.red):
+        super().__init__(pos, speed, radius*2, radius*2)
+        pygame.draw.circle(self.image, color, (radius, radius), radius)
+        if self._draw_boxes:
+            N = 3
+            step = (radius*2)/N
+            for y in range(N):
+                for x in range(N):
+                    lines = [
+                        (x*step, y*step),
+                        ((x+1)*step, y*step),
+                        ((x+1)*step, (y+1)*step),
+                        (x*step, (y+1)*step),
+                    ]
+
+                    pygame.draw.lines(
+                        surface=self.image,
+                        color=black,
+                        closed=True,
+                        points=lines,
+                        width=3,
+                    )
+
+        self.radius = radius
+        self.mass = mass
+
+    @classmethod
+    def random(cls, width, height):
+        mass = random.choice([100.0,90.0,80.0,70.0])
+        speed_limit = 0.5
+        return cls(
+            pos=[random.randint(0, width), random.randint(0, height)],
+            speed=[random.uniform(-speed_limit, speed_limit), random.uniform(-speed_limit, speed_limit)],
+            radius=mass / 2,
+            mass=mass
+        )
+
+    @property
+    def origin(self):
+        return vector.Vector(self.x + self.radius, self.y + self.radius)
 
     def collide(self, other):
         normal = (self.origin - other.origin).normalize()
@@ -145,39 +178,7 @@ class Ball(pygame.sprite.Sprite):
 
 
 if __name__ == "__main__":
+    window_size = (640*2, 480*2)
+    game = Game(*window_size)
+    game.run()
 
-    game = Game(640, 480)
-    running = True
-    ball01 = Ball(pos=[0, 0], speed=[1, 1], radius=50, mass=500, color=blue)
-    ball02 = Ball(pos=[0, 380], speed=[0, 0], radius=50, mass=10, color=red)
-    ball03 = Ball(pos=[430, 0], speed=[2, 2], radius=25, mass=5, color=black)
-    ball04 = Ball(pos=[330, 0], speed=[2, 2], radius=25, mass=5, color=green)
-    ball05 = Ball(pos=[230, 0], speed=[2, 2], radius=25, mass=5, color=gray)
-
-    spritelist = [ball01, ball02, ball03, ball04, ball05]
-
-    group = pygame.sprite.Group(spritelist)
-
-    clock = pygame.time.Clock()
-    fps = 120
-
-    while running is True:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-
-
-        for a, b in combinations(group, r=2):
-            if pygame.sprite.collide_circle(a, b):
-                a.collide(b)
-
-        for ball in spritelist:
-            ball.update()
-
-        game.window.blit(game.surface, [0, 0])
-        group.draw(game.window)
-
-        clock.tick(fps)
-        pygame.display.update()
-
-    pygame.quit()
