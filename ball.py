@@ -9,6 +9,7 @@ class Game:
     def __init__(self, width, height):
         self.window_size = width, height
         self.window = pygame.display.set_mode(self.window_size)
+        pygame.display.set_caption("Asteroids")
         self.surface = pygame.Surface([width, height])
         self.surface.fill(white)
 
@@ -53,15 +54,33 @@ class Ball(pygame.sprite.Sprite):
 
     @property
     def origin(self):
-        return vector.Vector(self.rect.x + self.radius, self.rect.y + self.radius)
+        return vector.Vector(self.x + self.radius, self.y + self.radius)
 
     @property
     def position(self):
-        return vector.Vector(self.rect.x, self.rect.y)
+        return vector.Vector(*self._pos)
 
     @position.setter
     def position(self, value):
+        # Using only rect.x and rect.y causes weird behaviour
+        self._pos = value
         self.rect.x, self.rect.y = value
+
+    @property
+    def x(self):
+        return self._pos[0]
+
+    @x.setter
+    def x(self, value):
+        self.position = value, self.y
+
+    @property
+    def y(self):
+        return self._pos[1]
+
+    @y.setter
+    def y(self, value):
+        self.position = self.x, value
 
     def move(self):
         self.position += self.speed
@@ -71,30 +90,30 @@ class Ball(pygame.sprite.Sprite):
         width, height = self.image.get_width(), self.image.get_height()
 
         if self._wrap_walls:
-            if self.rect.x > max_width - (width / 2):
-                self.rect.x = -(width / 2)
-            elif self.rect.x < -(width / 2):
-                self.rect.x = max_width - (width / 2)
+            if self.x > max_width - (width / 2):
+                self.x = -(width / 2)
+            elif self.x < -(width / 2):
+                self.x = max_width - (width / 2)
 
-            if self.rect.y > max_height - (height / 2):
-                self.rect.y = -(height / 2)
-            elif self.rect.y < -(height / 2):
-                self.rect.y = max_height - (height / 2)
+            if self.y > max_height - (height / 2):
+                self.y = -(height / 2)
+            elif self.y < -(height / 2):
+                self.y = max_height - (height / 2)
         else:
-            if self.rect.x > max_width - width:
-                self.rect.x = max_width - width
+            if self.x > max_width - width:
+                self.x = max_width - width
                 self.speed[0] = -self.speed[0]
 
-            if self.rect.x < 0:
-                self.rect.x = 0
+            if self.x < 0:
+                self.x = 0
                 self.speed[0] = -self.speed[0]
 
-            if self.rect.y > max_height - height:
-                self.rect.y = max_height - height
+            if self.y > max_height - height:
+                self.y = max_height - height
                 self.speed[1] = -self.speed[1]
 
-            if self.rect.y < 0:
-                self.rect.y = 0
+            if self.y < 0:
+                self.y = 0
                 self.speed[1] = -self.speed[1]
 
     def update(self):

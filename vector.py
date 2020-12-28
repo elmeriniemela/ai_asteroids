@@ -31,6 +31,8 @@ class Vector:
     def normalize(self):
         """ Returns a normalized unit vector """
         norm = self.norm()
+        if not norm:
+            return self.__class__(*self)
         normed = tuple( x / norm for x in self )
         return self.__class__(*normed)
 
