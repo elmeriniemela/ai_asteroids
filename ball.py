@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 from itertools import combinations
 import random
+import math
+from collections import namedtuple
 
 import pygame
 
-import vector
+from vector import Vector as Vec
 import colors as C
 
+BG_COLOR = C.black
 
 class Game:
     def __init__(self, width, height):
@@ -14,7 +17,7 @@ class Game:
         self.window = pygame.display.set_mode((self.width, self.height))
         pygame.display.set_caption("Asteroids")
         self.surface = pygame.Surface([width, height])
-        self.surface.fill(C.white)
+        self.surface.fill(BG_COLOR)
 
     def run(self):
         running = True
@@ -24,15 +27,14 @@ class Game:
             pos=[self.width/2, self.height/2],
             direction=[0,-1],
             speed=0,
-            width=30,
-            height=60,
+            size=60,
         )
 
         p_group = pygame.sprite.Group(player)
 
         clock = pygame.time.Clock()
         fps = 60
-        rotate_speed = 1.5
+        rotate_speed = 3.5
 
         while running is True:
             for event in pygame.event.get():
@@ -77,35 +79,46 @@ class Game:
 
 class Object(pygame.sprite.Sprite):
 
-    def __init__(self, pos, direction, speed, width, height):
+    def __init__(self, pos, direction, speed, size):
         super().__init__()
-        self.image = pygame.Surface([width, height])
-        self.image.fill(C.white)
-        self.image.set_colorkey(C.white)
+        # pygame attributes used by group.draw
+        self.image = pygame.Surface([size, size])
+        self.image.set_colorkey(BG_COLOR)
         self.rect = self.image.get_rect()
+
+
         self.position = pos
-        self.direction = direction
+        self.direction = Vec(*direction)
         self.speed = speed
+
+        self.size = size
+        self.draw()
+
+    def draw(self):
+        self.image.fill(BG_COLOR)
+        # pygame.draw.circle(self.image, C.silver, (self.size/2, self.size/2), self.size/2)
 
 
     @property
     def velocity(self):
-        return vector.Vector(*self.direction) * self.speed
+        assert isinstance(self.direction, Vec)
+        return self.direction * self.speed
 
     @velocity.setter
     def velocity(self, value):
-        assert isinstance(value, vector.Vector)
+        assert isinstance(value, Vec)
         self.speed = value.norm()
         self.direction = value.normalize()
 
     @property
     def position(self):
-        return vector.Vector(*self._pos)
+        assert isinstance(self._pos, Vec)
+        return self._pos
 
     @position.setter
     def position(self, value):
         # Using only rect.x and rect.y causes weird behaviour
-        self._pos = value
+        self._pos = Vec(*value)
         self.rect.x, self.rect.y = value
 
     @property
@@ -144,44 +157,126 @@ class Object(pygame.sprite.Sprite):
         self.move(dt)
 
 
+
+Line = namedtuple('Line', ['color', 'start_pos', 'end_pos', 'width'])
+
+
 class Player(Object):
     _max_speed = 0.7
     _acceleration = 0.0005
 
-    def __init__(self, pos, direction, speed, width, height):
-        super().__init__(pos, direction, speed, width, height)
-        line_width = 6
-        pygame.draw.polygon(
-            surface=self.image,
-            color=C.black,
-            points=[
-                (line_width, height-line_width),
-                (width/2, line_width),
-                (width-line_width, height-line_width)
-            ],
-            width=line_width,
-        )
-
-        self.thrust = False
+    def __init__(self, pos, direction, speed, size):
+        self.axis = Vec(*direction)
+        self._thrust = False
         self.rotate_speed = 0.0
+        width = 2
+        color = C.white
+        s = size
+        r = size/2
 
 
+
+        def clockAngle(r, theta):
+            rad = math.radians(theta - 90 % 360)
+            return Vec(r + r*math.cos(rad), r+r*math.sin(rad))
+
+        wingtip1 = clockAngle(r, 135)
+        wingtip2 = clockAngle(r, -135)
+        nose = Vec(r, 0)
+        backtip1 = wingtip1 * 0.95
+        backtip2 = wingtip2 * 0.95
+        thrust = Vec(r, backtip1.y)
+
+        # For some reason the back is off by 1 pixel on the x-axis
+        backtip1[0] += 1.0
+        backtip2[0] += 1.0
+
+        self.standby_lines = [
+            Line(color, Vec(r, 0), Vec(r,r), width ),
+            Line(
+                color=color,
+                start_pos=nose,
+                end_pos=wingtip1,
+                width=width,
+            ),
+            Line(
+                color=color,
+                start_pos=nose,
+                end_pos=wingtip2,
+                width=width,
+            ),
+            Line(
+                color=color,
+                start_pos=backtip1,
+                end_pos=backtip2,
+                width=width,
+            ),
+        ]
+        self.thrust_lines = [
+            Line(
+                color=C.red,
+                start_pos=thrust,
+                end_pos=Vec(r, 2*r),
+                width=size//20,
+            ),
+        ]
+
+        super().__init__(pos, direction, speed, size)
+
+    @property
+    def thrust(self):
+        return self._thrust
+
+    @thrust.setter
+    def thrust(self, value):
+        self._thrust = value
+        self.draw()
+
+
+    def transform(self, point):
+        return point.rotate_origin(self.angle(), origin=Vec(self.size/2, self.size/2))
+
+
+    def draw(self):
+        super().draw()
+        # Draw player
+        lines = self.standby_lines[:]
+        if self.thrust:
+            lines += self.thrust_lines[:]
+
+        for line in lines:
+            pygame.draw.line(
+                surface=self.image,
+                color=line.color,
+                start_pos=self.transform(line.start_pos),
+                end_pos=self.transform(line.end_pos),
+                width=line.width,
+            )
+
+
+    def angle(self, radians=False):
+        angle = self.axis.directional_angle2D(self.direction, radians=radians)
+        return angle
 
     def move(self, dt):
         super().move(dt)
         if self.thrust and self.velocity.norm() < self._max_speed:
             self.speed += (self._acceleration * dt)
+        elif not self.thrust and self.speed > 0:
+            self.speed -= (self._acceleration * dt) / 100
+        elif not self.thrust:
+            self.speed = 0
 
         if self.rotate_speed:
-            self.image = pygame.transform.rotate(self.image, self.rotate_speed)
-
+            self.direction = self.direction.rotate(self.rotate_speed)
+            self.draw()
 
 class Asteroid(Object):
     _draw_boxes = False
 
-    def __init__(self, pos, direction, speed, radius, mass, color=C.red):
-        super().__init__(pos, direction, speed, radius*2, radius*2)
-        pygame.draw.circle(self.image, color, (radius, radius), radius)
+    def __init__(self, pos, direction, speed, radius, mass):
+        super().__init__(pos, direction, speed, radius*2)
+        pygame.draw.circle(self.image, C.white, (radius, radius), radius, width=2)
         if self._draw_boxes:
             N = 3
             step = (radius*2)/N
@@ -196,7 +291,7 @@ class Asteroid(Object):
 
                     pygame.draw.lines(
                         surface=self.image,
-                        color=C.black,
+                        color=C.white,
                         closed=True,
                         points=lines,
                         width=3,
@@ -219,7 +314,7 @@ class Asteroid(Object):
 
     @property
     def origin(self):
-        return vector.Vector(self.x + self.radius, self.y + self.radius)
+        return Vec(self.x + self.radius, self.y + self.radius)
 
     def collide(self, other):
         normal = (self.origin - other.origin).normalize()

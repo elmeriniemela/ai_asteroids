@@ -28,6 +28,38 @@ class Vector:
         else:
             return arg_in_deg
 
+    def angle(self, other, radians=False):
+        """Return the angle between 2 vectors"""
+        if not isinstance(other, Vector):
+            raise ValueError('The angle requires another vector')
+        a = (self * other) / (self.norm()*other.norm())
+        arg_in_rad = math.acos(a)
+
+        if radians:
+            return arg_in_rad
+        return math.degrees(arg_in_rad)
+
+    def directional_angle2D(self, other, radians=False):
+        dot = self * other
+        det = self.determinant(other)
+        arg_in_rad = math.atan2(det, dot)
+        if radians:
+            return arg_in_rad
+        return math.degrees(arg_in_rad)
+
+    @property
+    def x(self):
+        return self.values[0]
+
+    @property
+    def y(self):
+        return self.values[1]
+
+    def determinant(self, other):
+        if len(self) != 2 and len(other) != 2:
+            raise ValueError("Determinant between 2 vectors is only defined if they form a 2X2 matrix.")
+        return self.x * other.y - other.x * self.y
+
     def normalize(self):
         """ Returns a normalized unit vector """
         norm = self.norm()
@@ -71,6 +103,14 @@ class Vector:
         x, y = self.values
         x, y = dc*x - ds*y, ds*x + dc*y
         return self.__class__(x, y)
+
+    def rotate_origin(self, theta, origin):
+        if not isinstance(origin, Vector):
+            raise ValueError('The origin must be another vector')
+        point = self - origin
+        point = point.rotate(theta)
+        point += origin
+        return point
 
     def matrix_mult(self, matrix):
         """ Multiply this vector by a matrix.  Assuming matrix is a list of lists.
