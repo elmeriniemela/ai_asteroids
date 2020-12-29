@@ -25,8 +25,7 @@ class Game:
         asteroids = pygame.sprite.Group(spritelist)
         player = Player(
             pos=[self.width/2, self.height/2],
-            direction=[0,-1],
-            speed=0,
+            velocity=[0,0],
             size=60,
         )
 
@@ -79,7 +78,7 @@ class Game:
 
 class Object(pygame.sprite.Sprite):
 
-    def __init__(self, pos, direction, speed, size):
+    def __init__(self, pos, velocity, size):
         super().__init__()
         # pygame attributes used by group.draw
         self.image = pygame.Surface([size, size])
@@ -88,8 +87,7 @@ class Object(pygame.sprite.Sprite):
 
 
         self.position = pos
-        self.direction = Vec(*direction)
-        self.speed = speed
+        self.velocity = Vec(*velocity)
 
         self.size = size
         self.draw()
@@ -98,17 +96,6 @@ class Object(pygame.sprite.Sprite):
         self.image.fill(BG_COLOR)
         # pygame.draw.circle(self.image, C.silver, (self.size/2, self.size/2), self.size/2)
 
-
-    @property
-    def velocity(self):
-        assert isinstance(self.direction, Vec)
-        return self.direction * self.speed
-
-    @velocity.setter
-    def velocity(self, value):
-        assert isinstance(value, Vec)
-        self.speed = value.norm()
-        self.direction = value.normalize()
 
     @property
     def position(self):
@@ -165,8 +152,9 @@ class Player(Object):
     _max_speed = 0.7
     _acceleration = 0.0005
 
-    def __init__(self, pos, direction, speed, size):
-        self.axis = Vec(*direction)
+    def __init__(self, pos, velocity, size):
+        self.axis = Vec(0, -1)
+        self.direction = Vec(0, -1)
         self._thrust = False
         self.rotate_speed = 0.0
         width = 2
@@ -221,7 +209,7 @@ class Player(Object):
             ),
         ]
 
-        super().__init__(pos, direction, speed, size)
+        super().__init__(pos, velocity, size)
 
     @property
     def thrust(self):
@@ -260,12 +248,10 @@ class Player(Object):
 
     def move(self, dt):
         super().move(dt)
-        if self.thrust and self.velocity.norm() < self._max_speed:
-            self.speed += (self._acceleration * dt)
-        elif not self.thrust and self.speed > 0:
-            self.speed -= (self._acceleration * dt) / 100
-        elif not self.thrust:
-            self.speed = 0
+        if self.thrust:
+            dv = self.direction * (self._acceleration * dt)
+            if (self.velocity + dv).norm() < self._max_speed:
+                self.velocity += dv
 
         if self.rotate_speed:
             self.direction = self.direction.rotate(self.rotate_speed)
@@ -274,8 +260,8 @@ class Player(Object):
 class Asteroid(Object):
     _draw_boxes = False
 
-    def __init__(self, pos, direction, speed, radius, mass):
-        super().__init__(pos, direction, speed, radius*2)
+    def __init__(self, pos, velocity, radius, mass):
+        super().__init__(pos, velocity, radius*2)
         pygame.draw.circle(self.image, C.white, (radius, radius), radius, width=2)
         if self._draw_boxes:
             N = 3
@@ -303,11 +289,11 @@ class Asteroid(Object):
     @classmethod
     def random(cls, width, height):
         mass = random.choice([100.0,90.0,80.0,70.0])
-        direction = [random.uniform(-1, 1), random.uniform(-1, 1)]
+        speed = 0.5
+        velocity = [random.uniform(-speed, speed), random.uniform(-speed, speed)]
         return cls(
             pos=[random.randint(0, width), random.randint(0, height)],
-            direction=direction,
-            speed=random.uniform(0.0, 0.5),
+            velocity=velocity,
             radius=mass / 2,
             mass=mass
         )
