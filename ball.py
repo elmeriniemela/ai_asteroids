@@ -14,26 +14,40 @@ BG_COLOR = C.black
 class Game:
     def __init__(self, width, height):
         self.width, self.height = width, height
-        self.window = pygame.display.set_mode((self.width, self.height))
+        self.window = pygame.display.set_mode((width, height))
         pygame.display.set_caption("Asteroids")
         self.surface = pygame.Surface([width, height])
         self.surface.fill(BG_COLOR)
+        self.groups = []
+
+    def update(self, dt):
+        self.window.blit(self.surface, [0, 0])
+        for group in self.groups:
+            group.update(dt, window_mode=(self.width, self.height))
+            group.draw(self.window)
+        pygame.display.update()
+
+    def group(self, *sprites):
+        group = pygame.sprite.Group(*sprites)
+        self.groups.append(group)
+        return group
 
     def run(self):
         running = True
-        spritelist = [Asteroid.random(self.width, self.height) for _ in range(10)]
-        asteroids = pygame.sprite.Group(spritelist)
         player = Player(
             pos=[self.width/2, self.height/2],
             velocity=[0,0],
             size=60,
         )
+        self.group(player)
 
-        p_group = pygame.sprite.Group(player)
+        asteroids = self.group(Asteroid.random(self.width, self.height) for _ in range(10))
+        bullets = self.group()
 
         clock = pygame.time.Clock()
         fps = 60
         rotate_speed = 3.5
+        bullet_speed = 1.0
 
         while running is True:
             for event in pygame.event.get():
@@ -47,10 +61,9 @@ class Game:
                         player.rotate_speed = -rotate_speed
                     if event.key == pygame.K_RIGHT:
                         player.rotate_speed = rotate_speed
-                    if event.key == pygame.K_SPACE and player_dying_delay == 0 and len(bullets) < bullet_capacity:
-                        bullets.append(Bullet(player.x, player.y, player.dir))
-                    if event.key == pygame.K_LSHIFT:
-                        hyperspace = 30
+                    if event.key == pygame.K_SPACE:
+                        bullets.add(Bullet(player.cannon, (player.direction * bullet_speed) + player.velocity))
+
                 if event.type == pygame.KEYUP:
                     if event.key == pygame.K_UP:
                         player.thrust = False
@@ -63,16 +76,7 @@ class Game:
                 if pygame.sprite.collide_circle(a, b):
                     a.collide(b)
 
-            for ball in spritelist:
-                ball.update(dt)
-
-            player.update(dt)
-
-            game.window.blit(game.surface, [0, 0])
-            asteroids.draw(game.window)
-            p_group.draw(game.window)
-
-            pygame.display.update()
+            self.update(dt)
 
         pygame.quit()
 
@@ -84,18 +88,20 @@ class Object(pygame.sprite.Sprite):
         self.image = pygame.Surface([size, size])
         self.image.set_colorkey(BG_COLOR)
         self.rect = self.image.get_rect()
-
-
         self.position = pos
         self.velocity = Vec(*velocity)
-
         self.size = size
-        self.draw()
 
     def draw(self):
         self.image.fill(BG_COLOR)
         # pygame.draw.circle(self.image, C.silver, (self.size/2, self.size/2), self.size/2)
 
+    def add_internal(self, group):
+        """
+        Overwrite for initial draw.
+        """
+        self.draw()
+        return super().add_internal(group)
 
     @property
     def position(self):
@@ -127,22 +133,40 @@ class Object(pygame.sprite.Sprite):
     def move(self, dt):
         self.position += self.velocity * dt
 
-    def wall_collision(self):
+    def wall_collision(self, window_mode):
+        max_width, max_height = window_mode
         width, height = self.image.get_width(), self.image.get_height()
-        if self.x > game.width - (width / 2):
+        if self.x > max_width - (width / 2):
             self.x = -(width / 2)
         elif self.x < -(width / 2):
-            self.x = game.width - (width / 2)
+            self.x = max_width - (width / 2)
 
-        if self.y > game.height - (height / 2):
+        if self.y > max_height - (height / 2):
             self.y = -(height / 2)
         elif self.y < -(height / 2):
-            self.y = game.height - (height / 2)
+            self.y = max_height - (height / 2)
 
-    def update(self, dt):
-        self.wall_collision()
+    def update(self, dt, window_mode):
+        self.wall_collision(window_mode)
         self.move(dt)
 
+class Bullet(Object):
+    def __init__(self, pos, velocity):
+        self.radius = 2.0
+        super().__init__(pos, velocity, size=self.radius*2)
+        self.ttl = 250
+
+    def draw(self):
+        super().draw()
+        r = self.radius
+        pygame.draw.circle(self.image, C.white, (r, r), r)
+
+
+    def update(self, dt, window_mode):
+        super().update(dt, window_mode)
+        self.ttl -= dt
+        if self.ttl < 0:
+            self.kill()
 
 
 Line = namedtuple('Line', ['color', 'start_pos', 'end_pos', 'width'])
@@ -215,6 +239,10 @@ class Player(Object):
     def thrust(self):
         return self._thrust
 
+    @property
+    def cannon(self):
+        return self.position + self.transform(Vec(self.size/2, 0))
+
     @thrust.setter
     def thrust(self, value):
         self._thrust = value
@@ -262,7 +290,6 @@ class Asteroid(Object):
 
     def __init__(self, pos, velocity, radius, mass):
         super().__init__(pos, velocity, radius*2)
-        pygame.draw.circle(self.image, C.white, (radius, radius), radius, width=2)
         if self._draw_boxes:
             N = 3
             step = (radius*2)/N
@@ -285,6 +312,12 @@ class Asteroid(Object):
 
         self.radius = radius
         self.mass = mass
+
+
+    def draw(self):
+        super().draw()
+        r = self.radius
+        pygame.draw.circle(self.image, C.white, (r, r), r, width=2)
 
     @classmethod
     def random(cls, width, height):
@@ -326,7 +359,9 @@ class Asteroid(Object):
         other.velocity = normal_speed2 + tangent_speed2
 
 
-if __name__ == "__main__":
+def main():
     game = Game(640*2, 480*2)
     game.run()
 
+if __name__ == "__main__":
+    main()
