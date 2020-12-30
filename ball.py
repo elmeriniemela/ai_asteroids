@@ -31,15 +31,26 @@ class Game:
         self.window = pygame.display.set_mode((width, height))
         self.background = pygame.Surface([width, height])
         self.background.fill(BG_COLOR)
-        self.groups = []
         pygame.display.set_caption("Asteroids")
         pygame.font.init()
         self.font = pygame.font.SysFont('Comic Sans MS', 30, constructor=font_constructor)
+        self.reset()
+        self.mode = pygame.K_1
+        self.modes = {
+            pygame.K_1: 'Normal',
+            pygame.K_2: 'God mode',
+        }
+
+    def reset(self):
+        self.groups = []
         self.player = Player(
             pos=[self.width/2, self.height/2],
             velocity=[0,0],
             radius=30,
         )
+        self.group(self.player)
+        self.asteroids = self.group(Asteroid.random(self.width, self.height) for _ in range(5))
+        self.bullets = self.group()
 
 
     def update(self, dt):
@@ -61,6 +72,17 @@ class Game:
             source=score_surface,
             dest=[self.width - score_surface.get_rect().width, 0],
         )
+
+        if self.mode != 1:
+            self.window.blit(
+                source=self.font.render(
+                    text=self.modes[self.mode],
+                    antialias=False,
+                    color=C.white,
+                    background=None,
+                ),
+                dest=[0, 0],
+            )
         pygame.display.update()
 
     def group(self, *sprites):
@@ -69,12 +91,6 @@ class Game:
         return group
 
     def run(self):
-        player = self.player
-        self.group(player)
-
-        asteroids = self.group(Asteroid.random(self.width, self.height) for _ in range(5))
-        bullets = self.group()
-
         clock = pygame.time.Clock()
         fps = 60
         rotate_speed = 3.5
@@ -87,31 +103,51 @@ class Game:
 
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_UP:
-                        player.thrust = True
+                        self.player.thrust = True
                     if event.key == pygame.K_LEFT:
-                        player.rotate_speed = -rotate_speed
+                        self.player.rotate_speed = -rotate_speed
                     if event.key == pygame.K_RIGHT:
-                        player.rotate_speed = rotate_speed
+                        self.player.rotate_speed = rotate_speed
                     if event.key == pygame.K_SPACE:
-                        bullets.add(Bullet(player.cannon, (player.direction * bullet_speed) + player.velocity))
+                        self.bullets.add(Bullet(
+                            pos=self.player.cannon,
+                            velocity=(self.player.direction * bullet_speed) + self.player.velocity),
+                        )
+                    if event.key in self.modes:
+                        self.mode = event.key
+
 
                 if event.type == pygame.KEYUP:
                     if event.key == pygame.K_UP:
-                        player.thrust = False
+                        self.player.thrust = False
                     if event.key == pygame.K_LEFT or event.key == pygame.K_RIGHT:
-                        player.rotate_speed = 0
+                        self.player.rotate_speed = 0
 
             dt = clock.tick(fps)
 
-            for a, b in combinations(asteroids, r=2):
+            for a, b in combinations(self.asteroids, r=2):
                 if pygame.sprite.collide_circle(a, b):
                     a.collide(b)
 
-            for bullet in bullets:
-                for asteroid in asteroids:
+            for bullet in self.bullets:
+                for asteroid in self.asteroids:
                     if pygame.sprite.collide_circle(bullet, asteroid):
-                        bullet.collide(asteroid, asteroids)
-                        player.score += 1
+                        bullet.collide(asteroid, self.asteroids)
+                        self.player.score += 1
+
+
+            die = all([
+                not self.player.invincible,
+                pygame.sprite.spritecollideany(
+                    self.player,
+                    self.asteroids,
+                    collided=pygame.sprite.collide_circle,
+                ),
+                self.modes[self.mode] == 'Normal',
+            ])
+
+            if die:
+                self.reset()
 
             self.update(dt)
 
@@ -135,7 +171,6 @@ class Object(pygame.sprite.Sprite):
 
     def draw(self):
         self.image.fill(BG_COLOR)
-        # pygame.draw.circle(self.image, C.silver, (self.radius, self.radius), self.radius)
 
     def add_internal(self, group):
         """
@@ -251,6 +286,7 @@ class Player(Object):
         self._thrust = False
         self.rotate_speed = 0.0
         self.score = 0
+        self.invincible = 200
 
         def clockAngle(r, theta):
             rad = math.radians(theta - 90 % 360)
@@ -317,10 +353,18 @@ class Player(Object):
     def transform(self, point):
         return point.rotate_origin(self.angle(), origin=Vec(self.radius, self.radius))
 
+    def update(self, dt, window_mode):
+        super().update(dt, window_mode)
+        if self.invincible:
+            self.invincible -= dt * 0.1
+            if self.invincible < 0:
+                self.invincible = 0
+            self.draw()
 
     def draw(self):
         super().draw()
-        # Draw player
+        if self.invincible:
+            pygame.draw.circle(self.image, (self.invincible, self.invincible, self.invincible), (self.radius, self.radius), self.radius)
         lines = self.standby_lines[:]
         if self.thrust:
             lines += self.thrust_lines[:]
@@ -374,10 +418,14 @@ class Asteroid(Object):
 
     def collide(self, other):
         normal = (self.origin - other.origin).normalize()
+        overlap = (self.radius + other.radius) - (self.origin - other.origin).norm()
         tangent = normal.perpendicular()
 
-        self.position += normal
-        other.position -= normal
+        self.position += normal * overlap / 2
+        other.position -= normal * overlap / 2
+
+        assert (self.origin - other.origin).norm() - (self.radius + other.radius) < 1e-10, \
+            "Collision between asteroids left them overlapping."
 
         v1n = normal * self.velocity
         v2n = normal * other.velocity
