@@ -40,6 +40,9 @@ class Game:
             pygame.K_1: 'Normal',
             pygame.K_2: 'God mode',
         }
+        self.fps = 60
+        self.clock = pygame.time.Clock()
+        self.running = True
 
     def reset(self):
         self.groups = []
@@ -90,28 +93,23 @@ class Game:
         self.groups.append(group)
         return group
 
-    def run(self):
-        clock = pygame.time.Clock()
-        fps = 60
-        rotate_speed = 3.5
-        bullet_speed = 1.0
-        running = True
-        while running is True:
+
+    def run_once(self):
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    running = False
+                    self.running = False
 
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_UP:
                         self.player.thrust = True
                     if event.key == pygame.K_LEFT:
-                        self.player.rotate_speed = -rotate_speed
+                        self.player.toggle_rotate(-1)
                     if event.key == pygame.K_RIGHT:
-                        self.player.rotate_speed = rotate_speed
+                        self.player.toggle_rotate(1)
                     if event.key == pygame.K_SPACE:
                         self.bullets.add(Bullet(
                             pos=self.player.cannon,
-                            velocity=(self.player.direction * bullet_speed) + self.player.velocity),
+                            velocity=self.player.direction + self.player.velocity),
                         )
                     if event.key in self.modes:
                         self.mode = event.key
@@ -121,21 +119,22 @@ class Game:
                     if event.key == pygame.K_UP:
                         self.player.thrust = False
                     if event.key == pygame.K_LEFT or event.key == pygame.K_RIGHT:
-                        self.player.rotate_speed = 0
+                        self.player.toggle_rotate(0)
 
-            dt = clock.tick(fps)
+            dt = self.clock.tick(self.fps)
 
             for a, b in combinations(self.asteroids, r=2):
                 if pygame.sprite.collide_circle(a, b):
                     a.collide(b)
 
+            reward = 0
             for bullet in self.bullets:
                 for asteroid in self.asteroids:
                     if pygame.sprite.collide_circle(bullet, asteroid):
                         bullet.collide(asteroid, self.asteroids)
-                        self.player.score += 1
+                        reward += 1
 
-
+            self.player.score += reward
             die = all([
                 not self.player.invincible,
                 pygame.sprite.spritecollideany(
@@ -151,7 +150,13 @@ class Game:
 
             self.update(dt)
 
-        pygame.quit()
+            return reward, die, self.player.score
+
+
+    def run_forever(self):
+        while self.running is True:
+            self.run_once()
+
 
 class Object(pygame.sprite.Sprite):
 
@@ -345,6 +350,10 @@ class Player(Object):
             ),
         ]
 
+    def toggle_rotate(self, value):
+        assert value in {1,-1, 0}, "Rotation can be turned on with 1, swap direction with -1 and stopped with 0"
+        speed = 3.5
+        self.rotate_speed = speed * value
 
     @property
     def thrust(self):
@@ -401,7 +410,7 @@ class Player(Object):
                 self.velocity += dv
 
         if self.rotate_speed:
-            self.direction = self.direction.rotate(self.rotate_speed)
+            self.direction = self.direction.rotate(self.rotate_speed).normalize()
             self.draw()
 
 class Asteroid(Object):
@@ -456,7 +465,7 @@ class Asteroid(Object):
 
 def main():
     game = Game(640*2, 480*2)
-    game.run()
+    game.run_forever()
 
 if __name__ == "__main__":
     main()
