@@ -95,62 +95,62 @@ class Game:
 
 
     def run_once(self):
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    self.running = False
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
 
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_UP:
-                        self.player.thrust = True
-                    if event.key == pygame.K_LEFT:
-                        self.player.toggle_rotate(-1)
-                    if event.key == pygame.K_RIGHT:
-                        self.player.toggle_rotate(1)
-                    if event.key == pygame.K_SPACE:
-                        self.bullets.add(Bullet(
-                            pos=self.player.cannon,
-                            velocity=self.player.direction + self.player.velocity),
-                        )
-                    if event.key in self.modes:
-                        self.mode = event.key
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_UP:
+                    self.player.thrust = True
+                if event.key == pygame.K_LEFT:
+                    self.player.toggle_rotate(-1)
+                if event.key == pygame.K_RIGHT:
+                    self.player.toggle_rotate(1)
+                if event.key == pygame.K_SPACE:
+                    self.bullets.add(Bullet(
+                        pos=self.player.cannon,
+                        velocity=self.player.direction + self.player.velocity),
+                    )
+                if event.key in self.modes:
+                    self.mode = event.key
 
 
-                if event.type == pygame.KEYUP:
-                    if event.key == pygame.K_UP:
-                        self.player.thrust = False
-                    if event.key == pygame.K_LEFT or event.key == pygame.K_RIGHT:
-                        self.player.toggle_rotate(0)
+            if event.type == pygame.KEYUP:
+                if event.key == pygame.K_UP:
+                    self.player.thrust = False
+                if event.key == pygame.K_LEFT or event.key == pygame.K_RIGHT:
+                    self.player.toggle_rotate(0)
 
-            dt = self.clock.tick(self.fps)
+        dt = self.clock.tick(self.fps)
 
-            for a, b in combinations(self.asteroids, r=2):
-                if pygame.sprite.collide_circle(a, b):
-                    a.collide(b)
+        for a, b in combinations(self.asteroids, r=2):
+            if pygame.sprite.collide_circle(a, b):
+                a.collide(b)
 
-            reward = 0
-            for bullet in self.bullets:
-                for asteroid in self.asteroids:
-                    if pygame.sprite.collide_circle(bullet, asteroid):
-                        bullet.collide(asteroid, self.asteroids)
-                        reward += 1
+        reward = 0
+        for bullet in self.bullets:
+            for asteroid in self.asteroids:
+                if pygame.sprite.collide_circle(bullet, asteroid):
+                    bullet.collide(asteroid, self.asteroids)
+                    reward += 1
 
-            self.player.score += reward
-            die = all([
-                not self.player.invincible,
-                pygame.sprite.spritecollideany(
-                    self.player,
-                    self.asteroids,
-                    collided=pygame.sprite.collide_circle,
-                ),
-                self.modes[self.mode] == 'Normal',
-            ])
+        self.player.score += reward
+        die = all([
+            not self.player.invincible,
+            pygame.sprite.spritecollideany(
+                self.player,
+                self.asteroids,
+                collided=pygame.sprite.collide_circle,
+            ),
+            self.modes[self.mode] == 'Normal',
+        ])
 
-            if die:
-                self.reset()
+        if die:
+            self.reset()
 
-            self.update(dt)
+        self.update(dt)
 
-            return reward, die, self.player.score
+        return reward, die, self.player.score
 
 
     def run_forever(self):
