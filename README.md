@@ -1,5 +1,5 @@
-## Physics simulation 2D
+## AI Asteroids.
 
-This project comibines my highschool level physics studies with my programming hobby. I wanted to model 2D collisions and the momentum conservation principle visually.
+Asteroids game that I will use to test and train different neural networks.
 
-![alt text](https://raw.githubusercontent.com/thecodebasesite/Physics/master/physics.gif)
+![alt text](https://raw.githubusercontent.com/thecodebasesite/ai_asteroids/master/preview.png)
