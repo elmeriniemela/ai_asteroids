@@ -11,20 +11,56 @@ import colors as C
 
 BG_COLOR = C.black
 
+class Font(pygame.font.Font):
+    def render(self, text, antialias, color, background):
+        return super().render(text, antialias, color, background)
+
+
+def font_constructor(fontpath, size, bold, italic):
+    font = Font(fontpath, size)
+    if bold:
+        font.set_bold(True)
+    if italic:
+        font.set_italic(True)
+    return font
+
+
 class Game:
     def __init__(self, width, height):
         self.width, self.height = width, height
         self.window = pygame.display.set_mode((width, height))
-        pygame.display.set_caption("Asteroids")
-        self.surface = pygame.Surface([width, height])
-        self.surface.fill(BG_COLOR)
+        self.background = pygame.Surface([width, height])
+        self.background.fill(BG_COLOR)
         self.groups = []
+        pygame.display.set_caption("Asteroids")
+        pygame.font.init()
+        self.font = pygame.font.SysFont('Comic Sans MS', 30, constructor=font_constructor)
+        self.player = Player(
+            pos=[self.width/2, self.height/2],
+            velocity=[0,0],
+            radius=30,
+        )
+
 
     def update(self, dt):
-        self.window.blit(self.surface, [0, 0])
+        self.window.blit(
+            source=self.background,
+            dest=[0, 0],
+        )
         for group in self.groups:
             group.update(dt, window_mode=(self.width, self.height))
             group.draw(self.window)
+
+        score_surface = self.font.render(
+            text='Score: %s' % self.player.score,
+            antialias=False,
+            color=C.white,
+            background=None,
+        )
+        self.window.blit(
+            source=score_surface,
+            dest=[self.width - score_surface.get_rect().width, 0],
+        )
         pygame.display.update()
 
     def group(self, *sprites):
@@ -33,22 +69,17 @@ class Game:
         return group
 
     def run(self):
-        running = True
-        player = Player(
-            pos=[self.width/2, self.height/2],
-            velocity=[0,0],
-            size=60,
-        )
+        player = self.player
         self.group(player)
 
-        asteroids = self.group(Asteroid.random(self.width, self.height) for _ in range(10))
+        asteroids = self.group(Asteroid.random(self.width, self.height) for _ in range(5))
         bullets = self.group()
 
         clock = pygame.time.Clock()
         fps = 60
         rotate_speed = 3.5
         bullet_speed = 1.0
-
+        running = True
         while running is True:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -76,25 +107,35 @@ class Game:
                 if pygame.sprite.collide_circle(a, b):
                     a.collide(b)
 
+            for bullet in bullets:
+                for asteroid in asteroids:
+                    if pygame.sprite.collide_circle(bullet, asteroid):
+                        bullet.collide(asteroid, asteroids)
+                        player.score += 1
+
             self.update(dt)
 
         pygame.quit()
 
 class Object(pygame.sprite.Sprite):
 
-    def __init__(self, pos, velocity, size):
+    def __init__(self, pos, velocity, radius):
         super().__init__()
         # pygame attributes used by group.draw
-        self.image = pygame.Surface([size, size])
+        self.image = pygame.Surface([radius*2, radius*2])
         self.image.set_colorkey(BG_COLOR)
         self.rect = self.image.get_rect()
         self.position = pos
         self.velocity = Vec(*velocity)
-        self.size = size
+        self.radius = radius
+
+    @property
+    def origin(self):
+        return Vec(self.x + self.radius, self.y + self.radius)
 
     def draw(self):
         self.image.fill(BG_COLOR)
-        # pygame.draw.circle(self.image, C.silver, (self.size/2, self.size/2), self.size/2)
+        # pygame.draw.circle(self.image, C.silver, (self.radius, self.radius), self.radius)
 
     def add_internal(self, group):
         """
@@ -152,8 +193,7 @@ class Object(pygame.sprite.Sprite):
 
 class Bullet(Object):
     def __init__(self, pos, velocity):
-        self.radius = 2.0
-        super().__init__(pos, velocity, size=self.radius*2)
+        super().__init__(pos, velocity, radius=2)
         self.ttl = 250
 
     def draw(self):
@@ -168,6 +208,34 @@ class Bullet(Object):
         if self.ttl < 0:
             self.kill()
 
+    def collide(self, asteroid, group):
+        self.kill()
+        asteroid.kill()
+        if asteroid.radius < 20:
+            return
+        # Split into multiple pieces
+        tangent = self.velocity.normalize().perpendicular()
+
+        origin1 = asteroid.position + (tangent * (asteroid.radius / 2))
+        origin2 = asteroid.position - (tangent * (asteroid.radius / 2))
+        mag = asteroid.velocity.norm() + (self.velocity.norm() * 0.1)
+
+        dir_center = (asteroid.velocity + self.velocity).normalize()
+        dir1 = dir_center.rotate(15).normalize()
+        dir2 = dir_center.rotate(-15).normalize()
+
+        a1 = Asteroid(
+            pos=origin1,
+            velocity=dir1 * mag,
+            radius=asteroid.radius / 2,
+        )
+        a2 = Asteroid(
+            pos=origin2,
+            velocity=dir2 * mag,
+            radius=asteroid.radius / 2,
+        )
+        group.add(a1, a2)
+
 
 Line = namedtuple('Line', ['color', 'start_pos', 'end_pos', 'width'])
 
@@ -176,35 +244,33 @@ class Player(Object):
     _max_speed = 0.7
     _acceleration = 0.0005
 
-    def __init__(self, pos, velocity, size):
+    def __init__(self, pos, velocity, radius):
+        super().__init__(pos, velocity, radius)
         self.axis = Vec(0, -1)
         self.direction = Vec(0, -1)
         self._thrust = False
         self.rotate_speed = 0.0
-        width = 2
-        color = C.white
-        s = size
-        r = size/2
-
-
+        self.score = 0
 
         def clockAngle(r, theta):
             rad = math.radians(theta - 90 % 360)
             return Vec(r + r*math.cos(rad), r+r*math.sin(rad))
 
-        wingtip1 = clockAngle(r, 135)
-        wingtip2 = clockAngle(r, -135)
-        nose = Vec(r, 0)
+        wingtip1 = clockAngle(self.radius, 135)
+        wingtip2 = clockAngle(self.radius, -135)
+        nose = Vec(self.radius, 0)
         backtip1 = wingtip1 * 0.95
         backtip2 = wingtip2 * 0.95
-        thrust = Vec(r, backtip1.y)
+        thrust = Vec(self.radius, backtip1.y)
 
         # For some reason the back is off by 1 pixel on the x-axis
         backtip1[0] += 1.0
         backtip2[0] += 1.0
 
+        width = 2
+        color = C.white
         self.standby_lines = [
-            Line(color, Vec(r, 0), Vec(r,r), width ),
+            Line(color, Vec(self.radius, 0), Vec(self.radius,self.radius), width ),
             Line(
                 color=color,
                 start_pos=nose,
@@ -228,12 +294,11 @@ class Player(Object):
             Line(
                 color=C.red,
                 start_pos=thrust,
-                end_pos=Vec(r, 2*r),
-                width=size//20,
+                end_pos=Vec(self.radius, 2*self.radius),
+                width=radius//10,
             ),
         ]
 
-        super().__init__(pos, velocity, size)
 
     @property
     def thrust(self):
@@ -241,7 +306,7 @@ class Player(Object):
 
     @property
     def cannon(self):
-        return self.position + self.transform(Vec(self.size/2, 0))
+        return self.position + self.transform(Vec(self.radius, 0))
 
     @thrust.setter
     def thrust(self, value):
@@ -250,7 +315,7 @@ class Player(Object):
 
 
     def transform(self, point):
-        return point.rotate_origin(self.angle(), origin=Vec(self.size/2, self.size/2))
+        return point.rotate_origin(self.angle(), origin=Vec(self.radius, self.radius))
 
 
     def draw(self):
@@ -286,54 +351,26 @@ class Player(Object):
             self.draw()
 
 class Asteroid(Object):
-    _draw_boxes = False
 
-    def __init__(self, pos, velocity, radius, mass):
-        super().__init__(pos, velocity, radius*2)
-        if self._draw_boxes:
-            N = 3
-            step = (radius*2)/N
-            for y in range(N):
-                for x in range(N):
-                    lines = [
-                        (x*step, y*step),
-                        ((x+1)*step, y*step),
-                        ((x+1)*step, (y+1)*step),
-                        (x*step, (y+1)*step),
-                    ]
-
-                    pygame.draw.lines(
-                        surface=self.image,
-                        color=C.white,
-                        closed=True,
-                        points=lines,
-                        width=3,
-                    )
-
-        self.radius = radius
-        self.mass = mass
+    def __init__(self, pos, velocity, radius):
+        super().__init__(pos, velocity, radius)
+        self.mass = 2*math.pi*radius
 
 
     def draw(self):
         super().draw()
-        r = self.radius
-        pygame.draw.circle(self.image, C.white, (r, r), r, width=2)
+        pygame.draw.circle(self.image, C.white, (self.radius, self.radius), self.radius, width=2)
 
     @classmethod
     def random(cls, width, height):
-        mass = random.choice([100.0,90.0,80.0,70.0])
-        speed = 0.5
+        radius = random.choice([100.0,90.0,80.0,70.0])
+        speed = 0.2
         velocity = [random.uniform(-speed, speed), random.uniform(-speed, speed)]
         return cls(
             pos=[random.randint(0, width), random.randint(0, height)],
             velocity=velocity,
-            radius=mass / 2,
-            mass=mass
+            radius=radius,
         )
-
-    @property
-    def origin(self):
-        return Vec(self.x + self.radius, self.y + self.radius)
 
     def collide(self, other):
         normal = (self.origin - other.origin).normalize()
