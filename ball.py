@@ -297,7 +297,6 @@ class Player(Object):
         nose = Vec(self.radius, 0)
         backtip1 = wingtip1 * 0.95
         backtip2 = wingtip2 * 0.95
-        thrust = Vec(self.radius, backtip1.y)
 
         # For some reason the back is off by 1 pixel on the x-axis
         backtip1[0] += 1.0
@@ -326,11 +325,22 @@ class Player(Object):
                 width=width,
             ),
         ]
+
+        thrust_start = Vec(self.radius, backtip1.y)
+        thrust_end = Vec(self.radius, 2*self.radius)
+        thrust_mid = Vec(self.radius, backtip1.y + (2*self.radius - backtip1.y) * 0.5)
+
         self.thrust_lines = [
             Line(
                 color=C.red,
-                start_pos=thrust,
-                end_pos=Vec(self.radius, 2*self.radius),
+                start_pos=thrust_start,
+                end_pos=thrust_mid,
+                width=radius//5,
+            ),
+             Line(
+                color=C.orange,
+                start_pos=thrust_mid,
+                end_pos=thrust_end,
                 width=radius//10,
             ),
         ]
