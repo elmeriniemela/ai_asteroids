@@ -180,6 +180,11 @@ class Object(pygame.sprite.Sprite):
     def origin(self):
         return Vec(self.x + self.radius, self.y + self.radius)
 
+    @origin.setter
+    def origin(self, value):
+        value = Vec(*value)
+        self.position = value.x - self.radius, value.y - self.radius
+
     def draw(self):
         self.image.fill(BG_COLOR)
 
@@ -272,15 +277,17 @@ class Bullet(Object):
         dir2 = dir_center.rotate(-15).normalize()
 
         a1 = Asteroid(
-            pos=origin1,
+            pos=[0,0],
             velocity=dir1 * mag,
             radius=asteroid.radius / 2,
         )
+        a1.origin = origin1
         a2 = Asteroid(
-            pos=origin2,
+            pos=[0,0],
             velocity=dir2 * mag,
             radius=asteroid.radius / 2,
         )
+        a2.origin = origin2
         group.add(a1, a2)
 
 
