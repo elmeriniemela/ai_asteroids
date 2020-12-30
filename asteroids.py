@@ -39,12 +39,15 @@ class Game:
         self.modes = {
             pygame.K_1: 'Normal',
             pygame.K_2: 'God mode',
+            pygame.K_3: 'Freeze all',
+            pygame.K_4: 'Freeze asteroids',
         }
         self.fps = 60
         self.clock = pygame.time.Clock()
         self.running = True
 
     def reset(self):
+        random.seed(2)
         self.groups = []
         self.player = Player(
             pos=[self.width/2, self.height/2],
@@ -62,7 +65,11 @@ class Game:
             dest=[0, 0],
         )
         for group in self.groups:
-            group.update(dt, window_mode=(self.width, self.height))
+            group.update(
+                dt=dt,
+                window_mode=(self.width, self.height),
+                game_mode=self.modes[self.mode],
+            )
             group.draw(self.window)
 
         score_surface = self.font.render(
@@ -76,16 +83,15 @@ class Game:
             dest=[self.width - score_surface.get_rect().width, 0],
         )
 
-        if self.mode != 1:
-            self.window.blit(
-                source=self.font.render(
-                    text=self.modes[self.mode],
-                    antialias=False,
-                    color=C.white,
-                    background=None,
-                ),
-                dest=[0, 0],
-            )
+        self.window.blit(
+            source=self.font.render(
+                text=self.modes[self.mode],
+                antialias=False,
+                color=C.white,
+                background=None,
+            ),
+            dest=[0, 0],
+        )
         pygame.display.update()
 
     def group(self, *sprites):
@@ -211,11 +217,12 @@ class Object(pygame.sprite.Sprite):
     def y(self, value):
         self.position = self.x, value
 
-    def move(self, dt):
-        self.position += self.velocity * dt
+    def move(self, **kwargs):
+        if kwargs['game_mode'] != 'Freeze all':
+            self.position += self.velocity * kwargs['dt']
 
-    def wall_collision(self, window_mode):
-        max_width, max_height = window_mode
+    def wall_collision(self, **kwargs):
+        max_width, max_height = kwargs['window_mode']
         width, height = self.image.get_width(), self.image.get_height()
         if self.x > max_width - (width / 2):
             self.x = -(width / 2)
@@ -227,9 +234,9 @@ class Object(pygame.sprite.Sprite):
         elif self.y < -(height / 2):
             self.y = max_height - (height / 2)
 
-    def update(self, dt, window_mode):
-        self.wall_collision(window_mode)
-        self.move(dt)
+    def update(self, **kwargs):
+        self.wall_collision(**kwargs)
+        self.move(**kwargs)
 
 class Bullet(Object):
     def __init__(self, pos, velocity):
@@ -242,9 +249,9 @@ class Bullet(Object):
         pygame.draw.circle(self.image, C.white, (r, r), r)
 
 
-    def update(self, dt, window_mode):
-        super().update(dt, window_mode)
-        self.ttl -= dt
+    def update(self, **kwargs):
+        super().update(**kwargs)
+        self.ttl -= kwargs['dt']
         if self.ttl < 0:
             self.kill()
 
@@ -256,8 +263,8 @@ class Bullet(Object):
         # Split into multiple pieces
         tangent = self.velocity.normalize().perpendicular()
 
-        origin1 = asteroid.position + (tangent * (asteroid.radius / 2))
-        origin2 = asteroid.position - (tangent * (asteroid.radius / 2))
+        origin1 = asteroid.origin + (tangent * (asteroid.radius / 2))
+        origin2 = asteroid.origin - (tangent * (asteroid.radius / 2))
         mag = asteroid.velocity.norm() + (self.velocity.norm() * 0.1)
 
         dir_center = (asteroid.velocity + self.velocity).normalize()
@@ -372,10 +379,10 @@ class Player(Object):
     def transform(self, point):
         return point.rotate_origin(self.angle(), origin=Vec(self.radius, self.radius))
 
-    def update(self, dt, window_mode):
-        super().update(dt, window_mode)
+    def update(self, **kwargs):
+        super().update(**kwargs)
         if self.invincible:
-            self.invincible -= dt * 0.1
+            self.invincible -= kwargs['dt'] * 0.1
             if self.invincible < 0:
                 self.invincible = 0
             self.draw()
@@ -402,10 +409,10 @@ class Player(Object):
         angle = self.axis.directional_angle2D(self.direction, radians=radians)
         return angle
 
-    def move(self, dt):
-        super().move(dt)
+    def move(self, **kwargs):
+        super().move(**kwargs)
         if self.thrust:
-            dv = self.direction * (self._acceleration * dt)
+            dv = self.direction * (self._acceleration * kwargs['dt'])
             if (self.velocity + dv).norm() < self._max_speed:
                 self.velocity += dv
 
@@ -419,6 +426,11 @@ class Asteroid(Object):
         super().__init__(pos, velocity, radius)
         self.mass = 2*math.pi*radius
 
+    def move(self, **kwargs):
+        if kwargs['game_mode'] == 'Freeze asteroids':
+            return
+
+        return super().move(**kwargs)
 
     def draw(self):
         super().draw()
