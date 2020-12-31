@@ -1,2 +1,5 @@
 pygame
-tensorflow
+matplotlib
+numpy
+torch
+torchvision
