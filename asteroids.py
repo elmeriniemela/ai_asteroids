@@ -46,6 +46,33 @@ class Game:
         self.clock = pygame.time.Clock()
         self.running = True
 
+    def whiskers(self, draw=True):
+        dist_list = []
+        size = 250
+        for angle in range(0, 360, 360//(36)):
+            end = self.player.position + self.player.transform(self.player.vec_from_center(angle,size=size))
+            t_list = [size]
+            for a in self.asteroids:
+                t = a.intercect(self.player.origin, end)
+                if t and t < size:
+                    t_list.append(t)
+
+            dist = min(t_list)
+            dist_list.append(size-dist)
+            if draw:
+                end = self.player.position + self.player.transform(self.player.vec_from_center(angle,size=dist))
+
+                pygame.draw.line(
+                    surface=self.window,
+                    color=C.red,
+                    start_pos=self.player.origin,
+                    end_pos=end,
+                    width=2,
+                )
+        return dist_list
+
+
+
     def reset(self):
         random.seed(2)
         self.groups = []
@@ -92,6 +119,7 @@ class Game:
             ),
             dest=[0, 0],
         )
+        self.whiskers()
         pygame.display.update()
 
     def group(self, *sprites):
@@ -298,6 +326,19 @@ class Player(Object):
     _max_speed = 0.7
     _acceleration = 0.0005
 
+
+    def vec_from_center(self, theta, size=False):
+        """
+        Return a relative position on a cirle of radius=size, center=relatice center of surface
+        with angle theta starting from the nose up position
+        """
+        size = size or self.radius
+        rad = math.radians(theta - 90 % 360)
+        return Vec(
+            self.radius + size*math.cos(rad),
+            self.radius + size*math.sin(rad)
+        )
+
     def __init__(self, pos, velocity, radius):
         super().__init__(pos, velocity, radius)
         self.axis = Vec(0, -1)
@@ -307,12 +348,8 @@ class Player(Object):
         self.score = 0
         self.invincible = 200
 
-        def clockAngle(r, theta):
-            rad = math.radians(theta - 90 % 360)
-            return Vec(r + r*math.cos(rad), r+r*math.sin(rad))
-
-        wingtip1 = clockAngle(self.radius, 135)
-        wingtip2 = clockAngle(self.radius, -135)
+        wingtip1 = self.vec_from_center(135)
+        wingtip2 = self.vec_from_center(-135)
         nose = Vec(self.radius, 0)
         backtip1 = wingtip1 * 0.95
         backtip2 = wingtip2 * 0.95
@@ -383,8 +420,12 @@ class Player(Object):
         self.draw()
 
 
-    def transform(self, point):
-        return point.rotate_origin(self.angle(), origin=Vec(self.radius, self.radius))
+    def transform(self, vec):
+        """
+        Return a rotated vec around local origin.
+        i.e. apply self.angle
+        """
+        return vec.rotate_origin(self.angle(), origin=Vec(self.radius, self.radius))
 
     def update(self, **kwargs):
         super().update(**kwargs)
@@ -428,6 +469,30 @@ class Player(Object):
             self.draw()
 
 class Asteroid(Object):
+
+    def intercect(self, ray_start, ray_stop):
+        d = (ray_stop - ray_start).normalize()
+        f = ray_start - self.origin
+
+        a = d * d
+        b = 2 * (f * d)
+        c = (f*f) - self.radius**2
+        discriminant = b**2 - 4*a*c
+        if discriminant < 0:
+            return 0
+
+        discriminant = math.sqrt( discriminant )
+        t1 = (-b - discriminant)/(2*a)
+        t2 = (-b + discriminant)/(2*a)
+        if t1 >= 0:
+            t = t1
+        elif t2 >= 0:
+            t = t2
+        else:
+            t = 0
+
+        return t
+
 
     def __init__(self, pos, velocity, radius):
         super().__init__(pos, velocity, radius)
